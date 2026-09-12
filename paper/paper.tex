@@ -5,7 +5,6 @@
 \usepackage{booktabs}
 \usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
 \usepackage{natbib}
-\usepackage{authblk}
 
 \newtheorem{theorem}{Theorem}
 \newtheorem{definition}{Definition}
@@ -15,9 +14,7 @@
 \title{Retrieval-Augmented Generation as a Metric Space:\\
 Persistent Homology Diagnostics for RAG Corpora}
 
-\author[1]{Hashem ALSabi}
-\affil[1]{Tadweer Group, Abu Dhabi, United Arab Emirates}
-\renewcommand\Authands{ and }
+\author{Hashem ALSabi\\[2pt] \normalsize Tadweer Group, Abu Dhabi, United Arab Emirates}
 
 \hypersetup{
   pdftitle={Retrieval-Augmented Generation as a Metric Space},
@@ -33,7 +30,7 @@ Persistent Homology Diagnostics for RAG Corpora}
 
 \begin{center}
 \small Correspondence: \href{mailto:hashem.alsabi@tadweer.ae}{hashem.alsabi@tadweer.ae}\\
-Code and data: \url{https://github.com/hashemalsabi/tda-rag}
+Code and data: \url{https://github.com/Hashemalsabi/tda-rag}
 \end{center}
 \vspace{0.3cm}
 
@@ -324,9 +321,8 @@ Zomorodian, A., \& Carlsson, G. (2005). Computing persistent homology. \textit{D
 
 \end{thebibliography}
 
-\appendix
 \section{Reproducibility}
 
-Code, figures, and paper source are available at \url{https://github.com/hashemalsabi/tda-rag}. Experiments use \texttt{gudhi} for persistent homology, \texttt{scikit-learn} for TF-IDF/SVD, cosine distance, and Wilcoxon testing (\texttt{scipy.stats}), \texttt{gensim} for pretrained GloVe vectors (\texttt{glove-wiki-gigaword-50}), \texttt{nltk} for the Reuters-21578 corpus and English stop words, and \texttt{scipy.sparse.\allowbreak csgraph.\allowbreak shortest\_path} for graph-geodesic distances. Random seeds are fixed per experiment (documented in the accompanying code). Sample sizes: 20 topic-level embeddings pooled from 160 articles (Section~\ref{sec:exp1}), 66 articles (Section~\ref{sec:exp2}), and 121 articles $\times$ 3 independent samples (Section~\ref{sec:exp3}).
+Code, figures, and paper source are available at \url{https://github.com/Hashemalsabi/tda-rag}. Experiments use \texttt{gudhi} for persistent homology, \texttt{scikit-learn} for TF-IDF/SVD, cosine distance, and Wilcoxon testing (\texttt{scipy.stats}), \texttt{gensim} for pretrained GloVe vectors (\texttt{glove-wiki-gigaword-50}), \texttt{nltk} for the Reuters-21578 corpus and English stop words, and \texttt{scipy.sparse.\allowbreak csgraph.\allowbreak shortest\_path} for graph-geodesic distances. Random seeds are fixed per experiment (documented in the accompanying code). Sample sizes: 20 topic-level embeddings pooled from 160 articles (Section~\ref{sec:exp1}), 66 articles (Section~\ref{sec:exp2}), and 121 articles $\times$ 3 independent samples (Section~\ref{sec:exp3}).
 
 \end{document}
