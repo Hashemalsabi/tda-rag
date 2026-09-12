@@ -103,7 +103,7 @@ Figure~\ref{fig:filtration} illustrates the filtration on a 20-point example: fo
 \subsection{Counting connected components}
 \label{sec:counting}
 
-A finite metric space has exactly one Vietoris--Rips filtration for which $VR_{\epsilon}(X)$ is fully connected once $\epsilon$ reaches the diameter of $X$; consequently exactly one $H_0$ class has death $=\infty$ (it never merges into anything, since there is nothing left to merge into), while every other $H_0$ class has a finite death value corresponding to the $\epsilon$ at which its component merges with another. This gives a direct formula for the number of connected components at any threshold:
+The number of connected components of $VR_\epsilon(X)$ at any threshold $\epsilon$ can be read directly off the $H_0$ persistence diagram.
 
 \begin{proposition}
 \label{prop:beta0}
@@ -112,6 +112,12 @@ For a finite metric space $X$ with Vietoris--Rips filtration $\{VR_\epsilon(X)\}
 \beta_0(VR_\epsilon(X)) = 1 + \#\{\text{finite-death } H_0 \text{ bars } (b,d) : \epsilon \in [b, d)\}.
 \]
 \end{proposition}
+
+\begin{proof}
+By the interval decomposition of the persistence module $\{H_0(VR_\epsilon(X))\}_{\epsilon \geq 0}$ \citep{zomorodian2005computing}, $\beta_0(VR_\epsilon(X)) = \dim H_0(VR_\epsilon(X))$ equals the number of bars $(b,d)$ with $\epsilon \in [b,d)$, summed over all bars, finite- or infinite-death. It remains to show exactly one bar has death $=\infty$.
+
+At $\epsilon = 0$, assuming distinct points, $VR_0(X)$ has no edges, so $H_0(VR_0(X))$ has dimension $|X|$: every point is its own class, and every bar is born at $\epsilon=0$. Let $\delta = \max_{x,y \in X} d(x,y)$ be the diameter of $X$. For $\epsilon \geq \delta$, every pair of points satisfies $d(x,y) \leq \epsilon$, so $VR_\epsilon(X)$ contains the complete graph on $X$ as its 1-skeleton, hence is connected, giving $\dim H_0(VR_\epsilon(X)) = 1$. Since dimension is non-increasing along the filtration (components can only merge, never split, as $\epsilon$ increases) and equals $1$ for all $\epsilon \geq \delta$, exactly one bar has death $>\delta$; by the same monotonicity that bar's death cannot be any finite value without $\dim H_0$ dropping below $1$ for some $\epsilon > \delta$, which is impossible since $VR_\epsilon(X)$ remains the complete graph for all $\epsilon \geq \delta$. So exactly one bar has death $=\infty$, and every other bar has finite death. Separating this one bar from the sum gives the stated formula.
+\end{proof}
 
 In practice, we are interested in the number of components at the threshold immediately following the last significant merge, i.e.\ $1$ plus the number of finite-death bars whose lifetime clearly exceeds the lifetimes of the remaining bars. We identify this count by sorting finite-death bar lifetimes in decreasing order and locating the largest gap between consecutive values; if this gap falls after the $m$-th largest finite lifetime, the estimated component count is $m+1$. The infinite-death bar is excluded from the gap search itself, since its plotted lifetime depends on an arbitrary filtration cutoff (typically the diameter of $X$) rather than on any intrinsic merge event, and is not commensurable with the finite bars on the same numerical scale. This is the procedure used throughout Section~\ref{sec:experiments} for estimating topic count from an $H_0$ barcode.
 
