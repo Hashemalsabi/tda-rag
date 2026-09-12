@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+nltk_data/
+glove50.kv
+glove50.kv.vectors.npy
+*.gz
+.DS_Store

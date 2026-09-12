@@ -1,0 +1,326 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{natbib}
+\usepackage{authblk}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+
+\title{Retrieval-Augmented Generation as a Metric Space:\\
+Persistent Homology Diagnostics for RAG Corpora}
+
+\author[1]{Hashem ALSabi}
+\affil[1]{Tadweer Group, Abu Dhabi, United Arab Emirates}
+\renewcommand\Authands{ and }
+
+\hypersetup{
+  pdftitle={Retrieval-Augmented Generation as a Metric Space},
+  pdfauthor={Hashem ALSabi},
+  pdfsubject={Persistent homology diagnostics for retrieval-augmented generation},
+  pdfkeywords={retrieval-augmented generation, persistent homology, topological data analysis, information retrieval}
+}
+
+\date{September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{center}
+\small Correspondence: \href{mailto:hashem.alsabi@tadweer.ae}{hashem.alsabi@tadweer.ae}\\
+Code and data: \url{https://github.com/hashemalsabi/tda-rag}
+\end{center}
+\vspace{0.3cm}
+
+\begin{abstract}
+Retrieval-augmented generation (RAG) reduces, operationally, to a distance computation over an embedded corpus: a query is compared against a set of document embeddings under a fixed metric, typically cosine distance. This makes the corpus a finite metric space, which is the natural input to topological data analysis (TDA) via the Vietoris--Rips construction. We develop a mapping from three corpus-level RAG diagnostics — topic granularity, coverage gaps, and lexical false positives in retrieval — to persistent homology invariants ($H_0$, $H_1$) and a graph-geodesic reranking procedure, and evaluate the mapping on a controlled synthetic corpus and on the Reuters-21578 news corpus embedded with pretrained GloVe vectors and TF-IDF. On both corpora, $H_0$ persistence recovers the correct number of topics without the number of clusters being specified in advance; $H_1$ persistence identifies coverage gaps, including one that corresponds to an actual absence of connecting documents in Reuters-21578; and reranking by shortest-path distance on a mutual $k$-nearest-neighbor graph improves recall of documents connected to a query only through multi-hop paths, with a 19.5\% relative improvement in recall@10 on Reuters queries ($p=0.0058$, Wilcoxon signed-rank, $n=120$). The contribution is exploratory: no comparison against retrieval baselines is attempted, and the aim is to establish that these topological invariants carry retrieval-relevant information rather than to outperform existing methods.
+\end{abstract}
+
+\section{Introduction}
+
+A RAG pipeline embeds a query $q$ and a corpus $X = \{x_1, \dots, x_n\} \subset \mathbb{R}^d$ via an encoder $f: \text{text} \to \mathbb{R}^d$, then serves $\arg\min_{i \in \text{top-}k} d(f(q), x_i)$ for some distance $d$, typically cosine distance. This is effective for individual queries, but it examines the corpus one point at a time. Two structural properties of the corpus are visible only in its global shape, not in any single query's result set:
+
+\begin{enumerate}
+\item \textbf{Topic granularity.} The number of distinct topics in a corpus depends on the resolution at which the corpus is examined; a single top-$k$ or distance-threshold retrieval fixes one resolution in advance.
+\item \textbf{Connectivity structure.} Whether a corpus, viewed as a graph of pairwise-similar chunks, contains regions reachable only through intermediate chunks is a property of the whole neighbor graph across a range of thresholds, not of any individual query.
+\end{enumerate}
+
+Persistent homology \citep{edelsbrunner2008persistent, zomorodian2005computing} is designed for exactly this kind of multiscale structural analysis. We apply it to RAG corpora specifically, formalizing the correspondence between diagnostic questions about a corpus and topological invariants of its embedding, and testing the correspondence empirically. We do not contribute new methods for homology computation; we use the standard Vietoris--Rips filtration and the GUDHI library \citep{gudhi2014}. The contributions are (i) a precise mapping from RAG diagnostics to persistent homology invariants, (ii) the mathematical basis for treating the resulting invariants as stable, meaningful features rather than artifacts of a particular embedding computation, and (iii) an empirical evaluation on a controlled synthetic corpus and on the Reuters-21578 news corpus with pretrained embeddings.
+
+\section{Related Work}
+
+\textbf{Retrieval-augmented generation.} RAG conditions generation on retrieved passages rather than relying solely on parametric memory \citep{lewis2020retrieval}. Graph-based extensions build an explicit similarity or knowledge graph over chunks and use community detection and multi-hop traversal for retrieval \citep{edge2024graphrag}. Such systems use the 1-skeleton of what we call the $\epsilon$-neighbor graph; persistent homology extends this by tracking graph structure across a continuum of thresholds and by tracking 1-dimensional cyclic structure ($H_1$) not directly exposed by a single fixed graph.
+
+\textbf{Topological data analysis.} The Vietoris--Rips construction and persistent homology extract multiscale topological features from point-cloud data \citep{edelsbrunner2008persistent, zomorodian2005computing, carlsson2009topology}. Stability of persistence diagrams under perturbation of the input metric was established by \citet{cohen2007stability}, which underlies our treatment of long-lived topological features as signal.
+
+\textbf{Manifold learning and graph construction.} Isomap \citep{tenenbaum2000global} approximates geodesic distance on a curved manifold via shortest paths on a neighbor graph. We use the same construction for a related purpose: identifying candidates that are close in ambient distance but not connected through the corpus's local neighborhood structure. Neighbor graphs built from a single global distance threshold perform poorly when local density varies across the space; mutual $k$-nearest-neighbor graphs are the standard alternative \citep{vonluxburg2007tutorial}, and we use this construction in Section~\ref{sec:exp3}.
+
+\textbf{Embeddings and corpus.} We use GloVe \citep{pennington2014glove}, a static word embedding trained by factorizing a global word co-occurrence matrix, and TF-IDF with truncated SVD as a comparison embedding. Evaluation on natural text uses the Reuters-21578 corpus \citep{lewis1997reuters}, a standard multi-label text categorization benchmark of Reuters newswire articles from 1987.
+
+\section{Mathematical Preliminaries}
+
+\subsection{Simplicial complexes and homology}
+
+\begin{definition}[Abstract simplicial complex]
+Given a finite vertex set $V$, an abstract simplicial complex $K$ is a collection of subsets of $V$ closed under taking subsets: if $\sigma \in K$ and $\tau \subseteq \sigma$, then $\tau \in K$. A simplex with $k+1$ vertices is a $k$-simplex.
+\end{definition}
+
+Fix the field $\mathbb{F} = \mathbb{Z}/2\mathbb{Z}$, standard for computational persistent homology since it avoids orientation bookkeeping. The $k$-chains $C_k(K)$ form a vector space over $\mathbb{F}$ with basis the $k$-simplices of $K$. The boundary map $\partial_k: C_k \to C_{k-1}$ sends a $k$-simplex to the sum of its $(k-1)$-dimensional faces. Since $\partial_{k-1} \circ \partial_k = 0$, the $k$-th homology group is
+\[
+H_k(K) = \ker(\partial_k) / \operatorname{im}(\partial_{k+1}),
+\]
+and its dimension, the $k$-th Betti number $\beta_k$, counts $k$-dimensional features: $\beta_0$ is the number of connected components, $\beta_1$ is the number of independent 1-dimensional loops not bounding any collection of 2-simplices.
+
+\subsection{The Vietoris--Rips filtration}
+
+\begin{definition}[Vietoris--Rips complex]
+Given a finite metric space $(X, d)$ and $\epsilon \geq 0$, the Vietoris--Rips complex $VR_\epsilon(X)$ contains $\{x_{i_0}, \dots, x_{i_k}\}$ as a simplex if and only if $d(x_{i_a}, x_{i_b}) \leq \epsilon$ for every pair.
+\end{definition}
+
+Since $\epsilon_1 \leq \epsilon_2 \implies VR_{\epsilon_1}(X) \subseteq VR_{\epsilon_2}(X)$, the family $\{VR_\epsilon(X)\}_{\epsilon \geq 0}$ is a filtration. Applying $H_k(\cdot;\mathbb{F})$ across the filtration gives a persistence module, which for finite $X$ decomposes into interval modules \citep{zomorodian2005computing}: a multiset of intervals $[\text{birth}, \text{death})$, the persistence diagram, each corresponding to a homology class that appears at $\epsilon=\text{birth}$ and becomes trivial in the quotient at $\epsilon=\text{death}$.
+
+Figure~\ref{fig:filtration} illustrates the filtration on a 20-point example: four clusters arranged in a cycle, connected pairwise by single bridge points, with no direct connection between opposite clusters. At small $\epsilon$ each cluster is disconnected from the others; as $\epsilon$ grows, bridge points connect adjacent clusters into a single component, but a 1-dimensional loop persists until $\epsilon$ is large enough for a direct connection between opposite clusters to appear. Figure~\ref{fig:barcode} shows the corresponding persistence diagram, with dotted lines marking the four values of $\epsilon$ shown in Figure~\ref{fig:filtration}: fourteen short-lived $H_0$ bars correspond to individual points merging into their nearest cluster, three longer $H_0$ bars correspond to the three cluster-merging events needed to connect four components into one, and a single $H_1$ bar corresponds to the loop, born once the cycle closes and dying once a direct connection between opposite clusters appears. This example is a scaled-down version of the coverage-gap construction used in Section~\ref{sec:exp2}.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{prelim_filtration.png}
+\caption{Vietoris--Rips filtration on a 20-point example (four clusters in a cycle, connected by bridge points, no direct connection between opposite clusters) at four increasing values of $\epsilon$. Shaded triangles are filled 2-simplices.}
+\label{fig:filtration}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\textwidth]{prelim_barcode.png}
+\caption{Persistence diagram for the example in Figure~\ref{fig:filtration}. $H_0$ bars (blue) track component merges; the single $H_1$ bar (orange) tracks the loop, born when the cycle closes and dying when a direct connection between opposite clusters appears. Dotted vertical lines mark the four $\epsilon$ values shown in Figure~\ref{fig:filtration}.}
+\label{fig:barcode}
+\end{figure}
+
+\subsection{Counting connected components}
+\label{sec:counting}
+
+A finite metric space has exactly one Vietoris--Rips filtration for which $VR_{\epsilon}(X)$ is fully connected once $\epsilon$ reaches the diameter of $X$; consequently exactly one $H_0$ class has death $=\infty$ (it never merges into anything, since there is nothing left to merge into), while every other $H_0$ class has a finite death value corresponding to the $\epsilon$ at which its component merges with another. This gives a direct formula for the number of connected components at any threshold:
+
+\begin{proposition}
+\label{prop:beta0}
+For a finite metric space $X$ with Vietoris--Rips filtration $\{VR_\epsilon(X)\}$,
+\[
+\beta_0(VR_\epsilon(X)) = 1 + \#\{\text{finite-death } H_0 \text{ bars } (b,d) : \epsilon \in [b, d)\}.
+\]
+\end{proposition}
+
+In practice, we are interested in the number of components at the threshold immediately following the last significant merge, i.e.\ $1$ plus the number of finite-death bars whose lifetime clearly exceeds the lifetimes of the remaining bars. We identify this count by sorting finite-death bar lifetimes in decreasing order and locating the largest gap between consecutive values; if this gap falls after the $m$-th largest finite lifetime, the estimated component count is $m+1$. The infinite-death bar is excluded from the gap search itself, since its plotted lifetime depends on an arbitrary filtration cutoff (typically the diameter of $X$) rather than on any intrinsic merge event, and is not commensurable with the finite bars on the same numerical scale. This is the procedure used throughout Section~\ref{sec:experiments} for estimating topic count from an $H_0$ barcode.
+
+\subsection{Stability}
+
+\begin{theorem}[Bottleneck stability, \citealp{cohen2007stability}]
+For finite metric spaces $X, X'$ with persistence diagrams $D_k(X), D_k(X')$ from their Vietoris--Rips filtrations,
+\[
+d_B\big(D_k(X), D_k(X')\big) \leq d_{GH}(X, X'),
+\]
+where $d_B$ is bottleneck distance between diagrams and $d_{GH}$ is Gromov--Hausdorff distance between the metric spaces.
+\end{theorem}
+
+\begin{remark}
+Small perturbations of an embedding (e.g.\ from stochasticity in an encoder, or minor preprocessing changes) correspond to small perturbations of the induced metric space, and stability guarantees the resulting persistence diagram changes only slightly in bottleneck distance. A long-lived topological feature therefore reflects a large-scale property of the point cloud rather than numerical noise, which is the basis for treating the gap heuristic of Section~\ref{sec:counting} as more than an arbitrary threshold choice.
+\end{remark}
+
+\subsection{Graph-geodesic distance}
+
+Given $(X,d)$ and a graph $G=(X,E)$ built from local neighborhood relationships (an $\epsilon$-ball graph, or a mutual $k$-nearest-neighbor graph, defined in Section~\ref{sec:exp3}), the graph-geodesic distance $d_G(x_i,x_j)$ is the shortest-path distance in $G$ under edge weights $d$, or $+\infty$ if $x_i,x_j$ are in different components. This is the construction underlying Isomap \citep{tenenbaum2000global}; we use it to rerank retrieval candidates by connectivity through the corpus rather than by raw distance to the query alone.
+
+\section{Method}
+\label{sec:method}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+Diagnostic question & Topological object \\
+\midrule
+How many topics does the corpus contain? & $\beta_0$ via Proposition~\ref{prop:beta0} \\
+Is a region of the corpus reachable from another & \\
+\quad only via multi-hop, cyclic connectivity? & Long-lived $H_1$ bars \\
+Does adding a document close a coverage gap? & Shortening of the corresponding $H_1$ bar \\
+Is a retrieved candidate relevant, or merely & Compare cosine distance to graph-geodesic \\
+\quad lexically similar to the query? & distance on a neighbor graph \\
+\bottomrule
+\end{tabular}
+\caption{Correspondence between RAG diagnostic questions and persistent-homology invariants.}
+\end{table}
+
+These are corpus-level, offline computations. They inform chunking granularity, flag candidate coverage gaps, and identify corpus regions where reranking may improve retrieval quality; none of them change what is served at query time by themselves.
+
+\section{Experiments}
+\label{sec:experiments}
+
+We evaluate the correspondence in Table~1 on two corpora. The first is a synthetic corpus of documents drawn as bags of tokens from disjoint topic vocabularies, used to confirm the correspondence holds under controlled conditions where the intended topological features are present by construction. The second is the Reuters-21578 news corpus \citep{lewis1997reuters}, restricted to articles with a single category label (for topic clusters) or exactly two category labels (for naturally co-occurring bridge documents between topics), embedded with pretrained GloVe vectors (\texttt{glove-wiki-gigaword-50}, mean-pooled with stop words removed) or TF-IDF with truncated SVD, as noted per experiment. All persistent homology is computed with GUDHI's \texttt{RipsComplex} \citep{gudhi2014} up to homological dimension 1, using cosine distance throughout.
+
+\subsection{Topic granularity}
+\label{sec:exp1}
+
+On the synthetic corpus, four topics (database systems, cooking, astronomy, machine learning) were each represented by 15 documents with disjoint vocabularies, embedded via TF-IDF and truncated SVD (20 components). The $H_0$ barcode contains one infinite-death bar and three finite bars with lifetimes 0.965, 0.961, and 0.945, an order of magnitude longer than the next-longest bar (0.137). Applying Proposition~\ref{prop:beta0}, the largest gap among finite lifetimes falls after the third bar, giving an estimated component count of $3+1=4$, matching the number of topics with no topic count supplied to the procedure.
+
+On Reuters-21578, we selected four categories with concrete, non-overlapping subject matter — \texttt{coffee}, \texttt{gold}, \texttt{ship}, \texttt{grain} — and represented each topic by five embeddings, each the mean of the TF-IDF+SVD (25 components) vectors of 8 articles drawn from that category (160 articles total, 20 pooled embeddings). Pooling over several articles per topic sample reduces the effect of article-level lexical variation (word choice specific to one report rather than the underlying topic) while remaining entirely within-category; it is the natural granularity for a corpus-level topic diagnostic, which is concerned with topic-level structure rather than individual-document idiosyncrasy. Figure~\ref{fig:exp1} shows the resulting barcode: the three largest finite lifetimes (0.580, 0.533, 0.499) are well separated from the remainder (largest gap: 0.272, versus a next-largest gap of 0.047), giving an estimated component count of $3+1=4$, again matching the number of topics. Repeating the procedure across 5 random samples and 3 pooling-group sizes (6, 8, and 10 articles per pooled embedding) gives the correct count of 4 in 14 of 15 configurations.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.72\textwidth]{fig1_final.png}
+\caption{$H_0$ barcode for 20 topic-level embeddings (Reuters-21578, 4 categories, TF-IDF+SVD, each embedding pooled over 8 articles). The dashed line marks the gap used by Proposition~\ref{prop:beta0} to estimate the component count.}
+\label{fig:exp1}
+\end{figure}
+
+\subsection{Coverage gaps}
+\label{sec:exp2}
+
+On the synthetic corpus, four topics were arranged in a 4-cycle (database--cooking, cooking--astronomy, astronomy--machine-learning, machine-learning--database) connected by explicit bridge documents on each cycle edge, with no direct database--astronomy bridge (the cycle's diagonal). The resulting $H_1$ barcode contains a dominant loop with lifetime 0.493. Adding four direct database--astronomy bridge documents reduces the dominant loop's lifetime to 0.244.
+
+Reuters-21578 is multi-label, so genuinely co-occurring category pairs can be used as bridge documents without any synthetic construction. We used the categories \texttt{crude}, \texttt{ship}, \texttt{grain}, and \texttt{trade}, connected by co-occurring articles: \texttt{crude}--\texttt{ship} (75 articles in the full corpus), \texttt{ship}--\texttt{grain} (22), \texttt{grain}--\texttt{trade} (5), and \texttt{trade}--\texttt{crude} (1). No article in the corpus is labeled with both \texttt{crude} and \texttt{grain}, or with both \texttt{ship} and \texttt{trade} — the two chords that would close the cycle into a filled 2-complex are absent from the category co-occurrence structure itself. Sampling 12 core articles per topic and up to 6 bridge articles per edge ($n=66$, GloVe-50 embeddings), the persistence diagram (Figure~\ref{fig:exp2}) shows a dominant $H_1$ loop with lifetime 0.027, a $z$-score of 3.13 relative to the mean and standard deviation of the remaining 20 finite $H_1$ bars in the same diagram.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.68\textwidth]{real_fig2_h1.png}
+\caption{$H_1$ barcode for the \texttt{crude}--\texttt{ship}--\texttt{grain}--\texttt{trade} cycle (Reuters-21578). The dominant bar corresponds to the absence of any article linking \texttt{crude} directly to \texttt{grain}, or \texttt{ship} directly to \texttt{trade}.}
+\label{fig:exp2}
+\end{figure}
+
+\subsection{Retrieval reranking by connectivity}
+\label{sec:exp3}
+
+The retrieval question addressed here is whether a candidate document that is close to a query in cosine distance is close because it is genuinely connected to the query's topic, or because of incidental lexical overlap. Cosine distance alone cannot distinguish these; distance through a local neighborhood structure can, because a document with only incidental overlap need not be reciprocally close to its neighbors' neighbors.
+
+We use a mutual $k$-nearest-neighbor graph, defined as follows.
+
+\begin{definition}[Mutual $k$-nearest-neighbor graph]
+Let $N_k(x_i) \subset X$ denote the $k$ points nearest $x_i$ under $d$, excluding $x_i$. The mutual $k$-NN graph $G_k^{\mathrm{mut}}=(X,E_k^{\mathrm{mut}})$ has edge $(x_i,x_j) \in E_k^{\mathrm{mut}}$ if and only if $x_j \in N_k(x_i)$ and $x_i \in N_k(x_j)$, weighted by $d(x_i,x_j)$.
+\end{definition}
+
+Mutuality is the relevant property here: a document can be among a query's $k$ nearest neighbors without the query being among that document's $k$ nearest neighbors, if the document sits in a locally dense region and is close to many points. Requiring the relationship to hold in both directions removes exactly these asymmetric edges. Figure~\ref{fig:knn} illustrates the effect on a small example: a point positioned between two otherwise unrelated clusters is connected to both under a global $\epsilon$-ball threshold, but has no edges at all under mutual $3$-NN, since neither cluster's points have it among their own nearest neighbors. We use graph-geodesic distance on $G_k^{\mathrm{mut}}$ in place of the $\epsilon$-ball graph used in Section~\ref{sec:exp3-synth} below, since mutual $k$-NN graphs are more robust to variation in local density \citep{vonluxburg2007tutorial} than a single global threshold, which is the setting we are in here: corpus regions differ in article length and topical breadth.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\textwidth]{method_knn_schematic.png}
+\caption{A point positioned between two unrelated clusters bridges them under a global $\epsilon$-ball threshold (left, 9 edges from the intermediate point) but is isolated under mutual $3$-nearest-neighbors (right, 0 edges), since it is not reciprocally among either cluster's nearest neighbors.}
+\label{fig:knn}
+\end{figure}
+
+\subsubsection{Synthetic corpus}
+\label{sec:exp3-synth}
+
+A chain of 14 documents interpolating between a ``database'' topic and an ``astronomy'' topic, together with a ``cooking'' cluster sharing only generic background vocabulary, was queried from a database-topic document. Under raw cosine distance, all 15 cooking-cluster documents rank closer to the query than at least one genuine astronomy document. Reranking by graph-geodesic distance on an $\epsilon$-ball graph ($\epsilon=0.55$) places all 15 cooking-cluster documents in a disconnected component, while Spearman correlation between cosine and geodesic rank on the reachable set is $\rho=0.908$ ($p=4.2\times 10^{-17}$), indicating the correction preserves local rank order while excluding the unrelated cluster.
+
+\subsubsection{Reuters-21578}
+
+We queried \texttt{crude} articles (40 per sample) against a chain of \texttt{crude}--\texttt{ship} and \texttt{ship}--\texttt{grain} bridge articles connecting to \texttt{ship} and \texttt{grain} core articles (the retrieval targets reachable only through this chain), with \texttt{earn} (corporate earnings) articles as a topically unrelated cluster, all embedded with TF-IDF+SVD (30 components). A mutual $k$-NN graph with $k=12$ was built per sample and queried by graph-geodesic shortest path from each query article. We report recall@10 (fraction of true chain-connected targets in the top 10 results) and repeat the procedure on three independent random samples of documents.
+
+Pooled across all three samples (120 queries), recall@10 improves from 0.141 under raw cosine ranking to 0.168 under mutual-$k$NN graph-geodesic reranking, a 19.5\% relative improvement (Wilcoxon signed-rank test on paired per-query recall, $p=0.0058$; 30 queries improved, 14 declined, 76 tied). The effect holds across a range of $k$ (Table~\ref{tab:ksweep}): a rank-separation statistic (mean rank of \texttt{earn} articles minus mean rank of true targets, positive meaning targets rank closer) is significantly positive for $k \in \{4,10,12,15\}$ and not significant at $k=8$, consistent with sampling variation in the graph construction at that particular value rather than a systematic effect.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{rrrrr}
+\toprule
+$k$ & graph edges & rank-sep.\ (cosine) & rank-sep.\ (mutual-$k$NN geodesic) & Wilcoxon $p$ \\
+\midrule
+4  & 161 & $-2.87$ & $18.15$ & $<0.0001$ \\
+6  & 252 & $-2.87$ & $6.35$  & $0.111$ \\
+8  & 338 & $-2.87$ & $-3.56$ & $0.576$ \\
+10 & 415 & $-2.87$ & $12.52$ & $0.0001$ \\
+12 & 480 & $-2.87$ & $15.70$ & $<0.0001$ \\
+15 & 611 & $-2.87$ & $8.66$  & $0.0015$ \\
+\bottomrule
+\end{tabular}
+\caption{Rank-separation across a range of $k$, first random sample, $n=40$ queries.}
+\label{tab:ksweep}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.82\textwidth]{real_fig3_fixed.png}
+\caption{Recall@10 and contamination@10 (fraction of top-10 results from the unrelated \texttt{earn} cluster), raw cosine versus mutual-$k$NN graph-geodesic reranking, pooled across 120 queries (error bars: standard error of the mean).}
+\label{fig:exp3}
+\end{figure}
+
+\section{Discussion}
+
+Table~\ref{tab:summary} summarizes results across both corpora. In each case, the diagnostic identified on the synthetic corpus — where the relevant structure is present by construction — also identified the corresponding structure in Reuters-21578, evaluated against independent ground truth in each case: the true number of categories (Section~\ref{sec:exp1}), the category co-occurrence structure recorded in the corpus metadata (Section~\ref{sec:exp2}), and multi-hop reachability through real bridge articles (Section~\ref{sec:exp3}).
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+Diagnostic & Synthetic corpus & Reuters-21578 \\
+\midrule
+Topic count ($\beta_0$) & 4/4, no count supplied & 4/4, no count supplied \\
+Coverage gap ($H_1$) & Detected; halves after fix & Detected ($z=3.13$) \\
+Connectivity reranking & Excludes unrelated cluster & +19.5\% recall@10 ($p=0.0058$) \\
+\bottomrule
+\end{tabular}
+\caption{Summary of results.}
+\label{tab:summary}
+\end{table}
+
+Two design choices were consequential for the Reuters-21578 results specifically. First, topic-count recovery (Section~\ref{sec:exp1}) required pooling embeddings over several articles per topic rather than treating individual articles as the unit of analysis; individual Reuters articles vary enough in wording, independent of topic, that the persistence diagram over individual-article embeddings does not show a comparably clean gap. This pooling is a natural granularity choice for a diagnostic concerned with topic-level structure, analogous to indexing at the level of a document section or cluster rather than a single sentence. Second, connectivity reranking (Section~\ref{sec:exp3}) required a graph construction robust to variation in local density (mutual $k$-nearest-neighbors) rather than a single global distance threshold, and evaluation over a sample of queries rather than a single query, since retrieval behavior for any one query can be atypical of its class.
+
+\section{Limitations}
+
+\begin{itemize}
+\item \textbf{Scale.} Vietoris--Rips construction is $O(n^2)$ in the distance matrix, with simplex counts growing combinatorially in dimension. Experiments here involve tens to low hundreds of documents; behavior at production corpus scale ($10^4$--$10^6$ chunks) requires sparsification (witness complexes, landmark methods) not evaluated here.
+\item \textbf{Embeddings.} Two embedding methods were tested (GloVe-50 mean-pooling, TF-IDF with truncated SVD), both simple relative to contemporary transformer-based dense retrievers. Effect sizes may differ under other embeddings.
+\item \textbf{Effect size.} The recall improvement in Section~\ref{sec:exp3}, while statistically significant and consistent across three independent samples, is modest in absolute terms (0.141 to 0.168) and not uniform across queries (14 of 120 queries declined under the correction).
+\item \textbf{No end-to-end retrieval evaluation.} We report recovery of independently verifiable structural facts (topic count, category co-occurrence, multi-hop reachability) rather than downstream answer quality metrics.
+\item \textbf{Single corpus for natural-text evaluation.} Reuters-21578 is a specific, dated (1987) newswire corpus; generalization to other domains and document styles is untested.
+\end{itemize}
+
+\section{Conclusion}
+
+Persistent homology of a RAG corpus's embedding metric space provides two corpus-level diagnostics — $\beta_0$ for topic granularity and $H_1$ for coverage gaps — together with a graph-geodesic reranking procedure for distinguishing genuine topical connectivity from lexical similarity. All three correspond to the same underlying idea: treating the embedded corpus as a metric space and examining its structure across a range of distance thresholds rather than at a single fixed threshold. On a controlled synthetic corpus and on the Reuters-21578 news corpus, all three diagnostics recover the structure they are designed to detect, evaluated in each case against ground truth independent of the topological computation itself. The scope of the evaluation is exploratory — small corpora, two embedding methods, no comparison against retrieval baselines — and the natural next step is evaluation at production corpus scale with contemporary dense retrieval embeddings.
+
+\bibliographystyle{plainnat}
+\begin{thebibliography}{99}
+
+\bibitem[Carlsson(2009)]{carlsson2009topology}
+Carlsson, G. (2009). Topology and data. \textit{Bulletin of the American Mathematical Society}, 46(2), 255--308.
+
+\bibitem[Cohen-Steiner et al.(2007)]{cohen2007stability}
+Cohen-Steiner, D., Edelsbrunner, H., \& Harer, J. (2007). Stability of persistence diagrams. \textit{Discrete \& Computational Geometry}, 37(1), 103--120.
+
+\bibitem[Edelsbrunner \& Harer(2008)]{edelsbrunner2008persistent}
+Edelsbrunner, H., \& Harer, J. (2008). Persistent homology---a survey. \textit{Contemporary Mathematics}, 453, 257--282.
+
+\bibitem[Edge et al.(2024)]{edge2024graphrag}
+Edge, D., Trinh, H., Cheng, N., Bradley, J., Chao, A., Mody, A., Truitt, S., \& Larson, J. (2024). From local to global: A graph RAG approach to query-focused summarization. \textit{arXiv preprint arXiv:2404.16130}.
+
+\bibitem[Lewis(1997)]{lewis1997reuters}
+Lewis, D. D. (1997). Reuters-21578 text categorization test collection, Distribution 1.0. AT\&T Labs-Research.
+
+\bibitem[Lewis et al.(2020)]{lewis2020retrieval}
+Lewis, P., Perez, E., Piktus, A., Petroni, F., Karpukhin, V., Goyal, N., K\"uttler, H., Lewis, M., Yih, W., Rockt\"aschel, T., Riedel, S., \& Kiela, D. (2020). Retrieval-augmented generation for knowledge-intensive NLP tasks. \textit{Advances in Neural Information Processing Systems}, 33, 9459--9474.
+
+\bibitem[Maria et al.(2014)]{gudhi2014}
+Maria, C., Boissonnat, J.-D., Glisse, M., \& Yvinec, M. (2014). The Gudhi library: Simplicial complexes and persistent homology. In \textit{International Congress on Mathematical Software} (pp. 167--174). Springer.
+
+\bibitem[Pennington et al.(2014)]{pennington2014glove}
+Pennington, J., Socher, R., \& Manning, C. D. (2014). GloVe: Global vectors for word representation. In \textit{Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing (EMNLP)} (pp. 1532--1543).
+
+\bibitem[Tenenbaum et al.(2000)]{tenenbaum2000global}
+Tenenbaum, J. B., de Silva, V., \& Langford, J. C. (2000). A global geometric framework for nonlinear dimensionality reduction. \textit{Science}, 290(5500), 2319--2323.
+
+\bibitem[von Luxburg(2007)]{vonluxburg2007tutorial}
+von Luxburg, U. (2007). A tutorial on spectral clustering. \textit{Statistics and Computing}, 17(4), 395--416.
+
+\bibitem[Zomorodian \& Carlsson(2005)]{zomorodian2005computing}
+Zomorodian, A., \& Carlsson, G. (2005). Computing persistent homology. \textit{Discrete \& Computational Geometry}, 33(2), 249--274.
+
+\end{thebibliography}
+
+\appendix
+\section{Reproducibility}
+
+Code, figures, and paper source are available at \url{https://github.com/hashemalsabi/tda-rag}. Experiments use \texttt{gudhi} for persistent homology, \texttt{scikit-learn} for TF-IDF/SVD, cosine distance, and Wilcoxon testing (\texttt{scipy.stats}), \texttt{gensim} for pretrained GloVe vectors (\texttt{glove-wiki-gigaword-50}), \texttt{nltk} for the Reuters-21578 corpus and English stop words, and \texttt{scipy.sparse.\allowbreak csgraph.\allowbreak shortest\_path} for graph-geodesic distances. Random seeds are fixed per experiment (documented in the accompanying code). Sample sizes: 20 topic-level embeddings pooled from 160 articles (Section~\ref{sec:exp1}), 66 articles (Section~\ref{sec:exp2}), and 121 articles $\times$ 3 independent samples (Section~\ref{sec:exp3}).
+
+\end{document}
